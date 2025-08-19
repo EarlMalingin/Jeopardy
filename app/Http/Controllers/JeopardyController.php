@@ -79,7 +79,7 @@ class JeopardyController extends Controller
             'game_timer' => 'required|integer|min:60|max:3600', // 1 minute to 1 hour
             'question_timer' => 'required|integer|min:10|max:120', // 10 seconds to 2 minutes
             'category_count' => 'required|integer|min:1|max:8',
-            'question_count' => 'required|integer|min:3|max:60',
+            'question_count' => 'required|integer|min:3|max:15',
             'lobby_code' => 'nullable|string|size:6'
         ]);
 

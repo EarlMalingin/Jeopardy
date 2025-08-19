@@ -1185,7 +1185,7 @@
                 }
 
                 try {
-                    const response = await fetch('/jeopardy/question', {
+                    const response = await fetch('/jeopardy/select-question', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1331,7 +1331,7 @@
                 const currentTeam = 'team' + this.gameState.current_team;
                 
                 try {
-                    const response = await fetch('/jeopardy/answer', {
+                    const response = await fetch('/jeopardy/submit-answer', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1405,7 +1405,7 @@
                 
                 // Update the backend timer to trigger team switch
                 try {
-                    const response = await fetch('/jeopardy/timer', {
+                    const response = await fetch('/jeopardy/update-timer', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1508,7 +1508,7 @@
 
             async updateTimerOnBackend(questionTime, teamTime) {
                 try {
-                    await fetch('/jeopardy/timer', {
+                    await fetch('/jeopardy/update-timer', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
