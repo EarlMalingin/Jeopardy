@@ -43,25 +43,45 @@ COPY docker/nginx.conf /etc/nginx/sites-available/default
 # Copy supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Create .env file if it doesn't exist
-RUN if [ ! -f .env ]; then cp .env.example .env; fi
-
-# Generate application key
-RUN php artisan key:generate --no-interaction
-
-# Create database file for SQLite
-RUN touch database/database.sqlite
-
-# Run migrations
-RUN php artisan migrate --force
-
-# Optimize for production
-RUN php artisan config:cache \
-    && php artisan route:cache \
-    && php artisan view:cache
+# Create startup script
+RUN echo '#!/bin/bash\n\
+# Wait for database to be ready (if using external database)\n\
+if [ "$DB_CONNECTION" = "mysql" ] || [ "$DB_CONNECTION" = "pgsql" ]; then\n\
+    echo "Waiting for database connection..."\n\
+    while ! php artisan db:monitor > /dev/null 2>&1; do\n\
+        sleep 1\n\
+    done\n\
+fi\n\
+\n\
+# Create .env file if it doesn\'t exist\n\
+if [ ! -f .env ]; then\n\
+    cp .env.example .env\n\
+fi\n\
+\n\
+# Generate application key if not set\n\
+if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
+    php artisan key:generate --no-interaction\n\
+fi\n\
+\n\
+# Create database file for SQLite if using SQLite\n\
+if [ "$DB_CONNECTION" = "sqlite" ]; then\n\
+    touch database/database.sqlite\n\
+fi\n\
+\n\
+# Run migrations\n\
+php artisan migrate --force\n\
+\n\
+# Optimize for production\n\
+php artisan config:cache\n\
+php artisan route:cache\n\
+php artisan view:cache\n\
+\n\
+# Start supervisor\n\
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n\
+' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
 # Expose port 80
 EXPOSE 80
 
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Use the startup script
+CMD ["/var/www/html/start.sh"]

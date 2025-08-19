@@ -47,8 +47,9 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Create .env file if it doesn't exist
 RUN if [ ! -f .env ]; then cp .env.example .env; fi
 
-# Create database file for SQLite
-RUN touch database/database.sqlite \
+# Create database directory (for SQLite fallback)
+RUN mkdir -p database \
+    && touch database/database.sqlite \
     && chown www-data:www-data database/database.sqlite
 
 # Create storage directories and set permissions
@@ -65,8 +66,24 @@ set -e\n\
 \n\
 echo "Starting Jeopardy App..."\n\
 \n\
-# Wait a moment for any services\n\
-sleep 2\n\
+# Wait for database to be ready (if using MySQL/PostgreSQL)\n\
+if [ "$DB_CONNECTION" = "mysql" ] || [ "$DB_CONNECTION" = "pgsql" ]; then\n\
+    echo "Waiting for database connection..."\n\
+    max_attempts=30\n\
+    attempt=1\n\
+    while [ $attempt -le $max_attempts ]; do\n\
+        echo "Attempt $attempt/$max_attempts: Testing database connection..."\n\
+        if php artisan db:monitor > /dev/null 2>&1; then\n\
+            echo "Database connection successful!"\n\
+            break\n\
+        fi\n\
+        if [ $attempt -eq $max_attempts ]; then\n\
+            echo "Database connection failed after $max_attempts attempts. Continuing anyway..."\n\
+        fi\n\
+        sleep 2\n\
+        attempt=$((attempt + 1))\n\
+    done\n\
+fi\n\
 \n\
 # Generate key if not set\n\
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
