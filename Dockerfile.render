@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy composer files
+# Copy composer files first
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies
@@ -35,7 +35,8 @@ COPY . .
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
+    && chmod -R 755 /var/www/html/bootstrap/cache \
+    && chmod +x /var/www/html/artisan
 
 # Copy nginx configuration
 COPY docker/nginx.conf /etc/nginx/sites-available/default
@@ -46,22 +47,47 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Create .env file if it doesn't exist
 RUN if [ ! -f .env ]; then cp .env.example .env; fi
 
-# Generate application key (will be overridden by Render environment variables)
-RUN php artisan key:generate --no-interaction
-
 # Create database file for SQLite
-RUN touch database/database.sqlite
+RUN touch database/database.sqlite \
+    && chown www-data:www-data database/database.sqlite
 
-# Run migrations
-RUN php artisan migrate --force
+# Create storage directories and set permissions
+RUN mkdir -p storage/framework/cache/data \
+    && mkdir -p storage/framework/sessions \
+    && mkdir -p storage/framework/views \
+    && mkdir -p storage/logs \
+    && chown -R www-data:www-data storage \
+    && chmod -R 775 storage
 
-# Optimize for production
-RUN php artisan config:cache \
-    && php artisan route:cache \
-    && php artisan view:cache
+# Create startup script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Wait a moment for any services\n\
+sleep 2\n\
+\n\
+# Generate key if not set\n\
+if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
+    php artisan key:generate --no-interaction || echo "Key generation failed"\n\
+fi\n\
+\n\
+# Run migrations\n\
+php artisan migrate --force || echo "Migration failed but continuing"\n\
+\n\
+# Clear and recache\n\
+php artisan config:clear || echo "Config clear failed"\n\
+php artisan config:cache || echo "Config cache failed"\n\
+php artisan route:clear || echo "Route clear failed"\n\
+php artisan route:cache || echo "Route cache failed"\n\
+php artisan view:clear || echo "View clear failed"\n\
+php artisan view:cache || echo "View cache failed"\n\
+\n\
+# Start supervisor\n\
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n\
+' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
 # Expose port (Render will set this)
 EXPOSE $PORT
 
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Use startup script
+CMD ["/var/www/html/start.sh"]

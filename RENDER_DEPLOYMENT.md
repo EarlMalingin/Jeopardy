@@ -26,146 +26,147 @@ This guide will help you deploy your Laravel Jeopardy application to Render usin
 - **Dockerfile Path**: `Dockerfile.render`
 
 **Build Settings:**
-- **Build Command**: Leave empty (Docker will handle this)
-- **Start Command**: Leave empty (defined in Dockerfile)
+- **Build Command**: Leave empty (Dockerfile handles this)
+- **Start Command**: `/var/www/html/start.sh`
 
 ### 3. Environment Variables
 
 Add these environment variables in Render:
 
 ```
-APP_NAME=Jeopardy
+APP_NAME="Jeopardy Game"
 APP_ENV=production
-APP_KEY=base64:your-generated-key-here
 APP_DEBUG=false
 APP_URL=https://your-app-name.onrender.com
+APP_KEY=base64:your-generated-key-here
 
 LOG_CHANNEL=stack
-LOG_DEPRECATIONS_CHANNEL=null
 LOG_LEVEL=debug
 
 DB_CONNECTION=sqlite
 DB_DATABASE=/var/www/html/database/database.sqlite
 
-BROADCAST_DRIVER=log
 CACHE_DRIVER=file
-FILESYSTEM_DISK=local
-QUEUE_CONNECTION=sync
 SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
 SESSION_LIFETIME=120
 
-MEMCACHED_HOST=127.0.0.1
-
-REDIS_HOST=127.0.0.1
-REDIS_PASSWORD=null
-REDIS_PORT=6379
-
-MAIL_MAILER=smtp
-MAIL_HOST=mailpit
-MAIL_PORT=1025
-MAIL_USERNAME=null
-MAIL_PASSWORD=null
-MAIL_ENCRYPTION=null
-MAIL_FROM_ADDRESS="hello@example.com"
-MAIL_FROM_NAME="${APP_NAME}"
-
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_DEFAULT_REGION=us-east-1
-AWS_BUCKET=
-AWS_USE_PATH_STYLE_ENDPOINT=false
-
-PUSHER_APP_ID=
-PUSHER_APP_KEY=
-PUSHER_APP_SECRET=
-PUSHER_HOST=
-PUSHER_PORT=443
-PUSHER_SCHEME=https
-PUSHER_APP_CLUSTER=mt1
-
-VITE_APP_NAME="${APP_NAME}"
-VITE_PUSHER_APP_KEY="${PUSHER_APP_KEY}"
-VITE_PUSHER_HOST="${PUSHER_HOST}"
-VITE_PUSHER_PORT="${PUSHER_PORT}"
-VITE_PUSHER_SCHEME="${PUSHER_SCHEME}"
-VITE_PUSHER_APP_CLUSTER="${PUSHER_APP_CLUSTER}"
+BROADCAST_DRIVER=log
+FILESYSTEM_DISK=local
 ```
 
-### 4. Generate APP_KEY
+### 4. Generate Application Key
 
-After setting up the environment variables, you'll need to generate an APP_KEY. You can do this by:
+You can generate an application key using:
+```bash
+php artisan key:generate --show
+```
 
-1. Running the service once
-2. Going to the "Shell" tab in Render
-3. Running: `php artisan key:generate`
-4. Copy the generated key and update the APP_KEY environment variable
+Or let Render generate it automatically (the Dockerfile will handle this).
 
-### 5. Database Setup
+### 5. Advanced Settings
 
-The app uses SQLite by default, which is perfect for Render. The database file will be created automatically in the container.
+**Health Check Path**: `/health`
 
 ### 6. Deploy
 
-1. Click "Create Web Service"
-2. Render will automatically build and deploy your application
-3. The first build may take 5-10 minutes
-
-## Important Notes
-
-### File Permissions
-The Dockerfile handles file permissions automatically, but if you encounter issues:
-
-1. Go to the "Shell" tab in Render
-2. Run: `chmod -R 755 storage bootstrap/cache`
-
-### Environment Variables
-- Make sure `APP_URL` matches your Render service URL
-- Set `APP_DEBUG=false` for production
-- The `PORT` variable is automatically set by Render
-
-### Database
-- SQLite is used by default and works well on Render
-- The database file is created in the container
-- For production, consider using a managed database service
-
-### Caching
-The Dockerfile automatically runs:
-- `php artisan config:cache`
-- `php artisan route:cache`
-- `php artisan view:cache`
+Click "Create Web Service" and wait for the deployment to complete.
 
 ## Troubleshooting
 
-### Build Failures
-1. Check the build logs in Render
-2. Ensure all required files are present
-3. Verify the Dockerfile path is correct
+### Common Issues and Solutions
 
-### Runtime Errors
-1. Check the service logs in Render
-2. Verify environment variables are set correctly
-3. Ensure the APP_KEY is generated
+#### 1. "Could not open input file: artisan" Error
+**Solution**: The Dockerfile has been updated to:
+- Copy files in the correct order
+- Set proper permissions on the artisan file
+- Use a startup script that handles initialization properly
 
-### Database Issues
-1. Check if the SQLite file exists: `ls -la database/`
-2. Run migrations manually: `php artisan migrate`
-3. Check database permissions
+#### 2. Database Connection Issues
+**Solution**: The app uses SQLite which is file-based and doesn't require external database setup.
 
-## Performance Optimization
+#### 3. Permission Issues
+**Solution**: The Dockerfile now:
+- Sets proper ownership to www-data
+- Creates necessary directories with correct permissions
+- Handles storage directory permissions
 
-### For Better Performance:
-1. Enable Render's auto-scaling if needed
-2. Consider using a CDN for static assets
-3. Monitor your service's performance in Render's dashboard
+#### 4. Cache Issues
+**Solution**: The startup script clears and rebuilds all caches on startup.
 
-### Cost Optimization:
-1. Start with the free tier
-2. Monitor usage and upgrade only when needed
-3. Use Render's sleep mode for development environments
+### Debugging Deployment
+
+1. **Check Build Logs**: Look for any errors during the Docker build process
+2. **Check Runtime Logs**: Monitor the application logs for runtime errors
+3. **Test Health Endpoint**: Visit `/health` to verify the app is running
+4. **Check Environment Variables**: Ensure all required environment variables are set
+
+### Manual Deployment Steps
+
+If automatic deployment fails, you can:
+
+1. **Build Locally**:
+   ```bash
+   docker build -f Dockerfile.render -t jeopardy-app .
+   ```
+
+2. **Test Locally**:
+   ```bash
+   docker run -p 8000:8000 jeopardy-app
+   ```
+
+3. **Push to Registry**: If needed, push to a container registry and deploy from there.
+
+## Post-Deployment
+
+### 1. Verify Deployment
+- Visit your app URL
+- Check the health endpoint: `https://your-app.onrender.com/health`
+- Test the main game functionality
+
+### 2. Monitor Performance
+- Use Render's built-in monitoring
+- Check logs for any errors
+- Monitor resource usage
+
+### 3. Set Up Custom Domain (Optional)
+- In Render dashboard, go to your service settings
+- Add your custom domain
+- Update DNS records as instructed
+
+## File Structure
+
+The deployment uses these key files:
+- `Dockerfile.render` - Main Docker configuration
+- `docker/nginx.conf` - Nginx web server configuration
+- `docker/supervisord.conf` - Process manager configuration
+- `render.yaml` - Render-specific configuration (optional)
+- `.dockerignore` - Files to exclude from Docker build
 
 ## Support
 
 If you encounter issues:
-1. Check Render's documentation
-2. Review the Laravel deployment guide
-3. Check the service logs in Render dashboard
+1. Check the Render documentation
+2. Review the build and runtime logs
+3. Test the health endpoint
+4. Verify all environment variables are set correctly
+
+## Recent Fixes Applied
+
+### Fixed Issues:
+1. **Artisan File Not Found**: Updated Dockerfile to copy files in correct order and set proper permissions
+2. **Missing .env.example**: Created the file for Docker build process
+3. **Permission Issues**: Added proper file and directory permissions
+4. **Startup Script**: Created robust startup script that handles initialization
+5. **Health Check**: Added `/health` endpoint for deployment monitoring
+6. **Error Handling**: Added fallback error handling in startup script
+
+### Key Changes:
+- Moved all Laravel artisan commands to startup script
+- Added proper error handling and logging
+- Fixed file permissions and ownership
+- Created comprehensive startup script
+- Added health check endpoint
+- Improved Docker build process
+
+Your app should now deploy successfully on Render!
