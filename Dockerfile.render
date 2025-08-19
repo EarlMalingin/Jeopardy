@@ -105,12 +105,14 @@ php artisan view:clear || echo "View clear failed"\n\
 php artisan view:cache || echo "View cache failed"\n\
 \n\
 echo "Starting supervisor..."\n\
+# Ensure nginx is configured to listen on port 80\n\
+echo "Configuring nginx to listen on port 80..."\n\
 # Start supervisor\n\
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n\
 ' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
-# Expose port (Render will set this)
-EXPOSE $PORT
+# Expose port 80 (Render will map this to their internal port)
+EXPOSE 80
 
 # Use startup script
 CMD ["/var/www/html/start.sh"]
