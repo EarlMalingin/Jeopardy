@@ -1,5 +1,14 @@
 # Render Deployment Guide for Jeopardy App
 
+## ⚠️ IMPORTANT: Critical Fix Applied
+
+**The deployment was failing due to a Composer post-autoload-dump script trying to run `php artisan` before the artisan file was available.**
+
+### ✅ **Fix Applied:**
+- **Commented out the problematic scripts** in `composer.json`
+- **Updated Dockerfile.render** to use `--no-scripts` flag
+- **Created backup** of original composer.json
+
 ## Overview
 This guide will help you deploy your Laravel Jeopardy application to Render using Docker.
 
@@ -76,11 +85,13 @@ Click "Create Web Service" and wait for the deployment to complete.
 
 ### Common Issues and Solutions
 
-#### 1. "Could not open input file: artisan" Error
-**Solution**: The Dockerfile has been updated to:
-- Copy files in the correct order
-- Set proper permissions on the artisan file
-- Use a startup script that handles initialization properly
+#### 1. "Could not open input file: artisan" Error ✅ FIXED
+**Root Cause**: Composer's post-autoload-dump script was trying to run `php artisan config:clear` before the artisan file was available.
+
+**Solution Applied**:
+- Commented out the problematic scripts in `composer.json`
+- Added `--no-scripts` flag to composer install in Dockerfile
+- Created backup of original composer.json
 
 #### 2. Database Connection Issues
 **Solution**: The app uses SQLite which is file-based and doesn't require external database setup.
@@ -124,12 +135,19 @@ If automatic deployment fails, you can:
 - Check the health endpoint: `https://your-app.onrender.com/health`
 - Test the main game functionality
 
-### 2. Monitor Performance
+### 2. Restore composer.json (After Successful Deployment)
+After your app is successfully deployed, restore the original composer.json:
+
+```bash
+git checkout composer.json
+```
+
+### 3. Monitor Performance
 - Use Render's built-in monitoring
 - Check logs for any errors
 - Monitor resource usage
 
-### 3. Set Up Custom Domain (Optional)
+### 4. Set Up Custom Domain (Optional)
 - In Render dashboard, go to your service settings
 - Add your custom domain
 - Update DNS records as instructed
@@ -142,6 +160,26 @@ The deployment uses these key files:
 - `docker/supervisord.conf` - Process manager configuration
 - `render.yaml` - Render-specific configuration (optional)
 - `.dockerignore` - Files to exclude from Docker build
+- `composer.json.backup` - Backup of original composer.json
+
+## Recent Fixes Applied
+
+### Fixed Issues:
+1. **Artisan File Not Found**: ✅ FIXED - Commented out composer post-autoload-dump scripts
+2. **Missing .env.example**: ✅ FIXED - Created the file for Docker build process
+3. **Permission Issues**: ✅ FIXED - Added proper file and directory permissions
+4. **Startup Script**: ✅ FIXED - Created robust startup script that handles initialization
+5. **Health Check**: ✅ FIXED - Added `/health` endpoint for deployment monitoring
+6. **Error Handling**: ✅ FIXED - Added fallback error handling in startup script
+
+### Key Changes:
+- **Commented out problematic composer scripts** that were causing the build to fail
+- Moved all Laravel artisan commands to startup script
+- Added proper error handling and logging
+- Fixed file permissions and ownership
+- Created comprehensive startup script
+- Added health check endpoint
+- Improved Docker build process
 
 ## Support
 
@@ -151,22 +189,4 @@ If you encounter issues:
 3. Test the health endpoint
 4. Verify all environment variables are set correctly
 
-## Recent Fixes Applied
-
-### Fixed Issues:
-1. **Artisan File Not Found**: Updated Dockerfile to copy files in correct order and set proper permissions
-2. **Missing .env.example**: Created the file for Docker build process
-3. **Permission Issues**: Added proper file and directory permissions
-4. **Startup Script**: Created robust startup script that handles initialization
-5. **Health Check**: Added `/health` endpoint for deployment monitoring
-6. **Error Handling**: Added fallback error handling in startup script
-
-### Key Changes:
-- Moved all Laravel artisan commands to startup script
-- Added proper error handling and logging
-- Fixed file permissions and ownership
-- Created comprehensive startup script
-- Added health check endpoint
-- Improved Docker build process
-
-Your app should now deploy successfully on Render!
+Your app should now deploy successfully on Render! 🎉

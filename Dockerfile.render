@@ -1,4 +1,4 @@
-# Render-optimized Dockerfile for Laravel Jeopardy App
+# Simple Render-optimized Dockerfile for Laravel Jeopardy App
 FROM php:8.2-fpm
 
 # Set working directory
@@ -26,8 +26,8 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Copy composer files first
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install PHP dependencies (without scripts to avoid artisan dependency)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Copy application files
 COPY . .
@@ -63,18 +63,23 @@ RUN mkdir -p storage/framework/cache/data \
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\
+echo "Starting Jeopardy App..."\n\
+\n\
 # Wait a moment for any services\n\
 sleep 2\n\
 \n\
 # Generate key if not set\n\
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
+    echo "Generating application key..."\n\
     php artisan key:generate --no-interaction || echo "Key generation failed"\n\
 fi\n\
 \n\
 # Run migrations\n\
+echo "Running migrations..."\n\
 php artisan migrate --force || echo "Migration failed but continuing"\n\
 \n\
 # Clear and recache\n\
+echo "Clearing and rebuilding caches..."\n\
 php artisan config:clear || echo "Config clear failed"\n\
 php artisan config:cache || echo "Config cache failed"\n\
 php artisan route:clear || echo "Route clear failed"\n\
@@ -82,6 +87,7 @@ php artisan route:cache || echo "Route cache failed"\n\
 php artisan view:clear || echo "View clear failed"\n\
 php artisan view:cache || echo "View cache failed"\n\
 \n\
+echo "Starting supervisor..."\n\
 # Start supervisor\n\
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n\
 ' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
