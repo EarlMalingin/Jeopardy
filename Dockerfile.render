@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     sqlite3 \
     libsqlite3-dev \
+    net-tools \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql mbstring exif pcntl bcmath gd zip
 
 # Install Composer
@@ -66,34 +67,31 @@ set -e\n\
 \n\
 echo "Starting Jeopardy App..."\n\
 \n\
-# Wait for database to be ready (if using MySQL/PostgreSQL)\n\
-if [ "$DB_CONNECTION" = "mysql" ] || [ "$DB_CONNECTION" = "pgsql" ]; then\n\
-    echo "Waiting for database connection..."\n\
-    max_attempts=30\n\
-    attempt=1\n\
-    while [ $attempt -le $max_attempts ]; do\n\
-        echo "Attempt $attempt/$max_attempts: Testing database connection..."\n\
-        if php artisan db:monitor > /dev/null 2>&1; then\n\
-            echo "Database connection successful!"\n\
-            break\n\
-        fi\n\
-        if [ $attempt -eq $max_attempts ]; then\n\
-            echo "Database connection failed after $max_attempts attempts. Continuing anyway..."\n\
-        fi\n\
-        sleep 2\n\
-        attempt=$((attempt + 1))\n\
-    done\n\
-fi\n\
-\n\
 # Generate key if not set\n\
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
     echo "Generating application key..."\n\
     php artisan key:generate --no-interaction || echo "Key generation failed"\n\
 fi\n\
 \n\
-# Run migrations\n\
+# Run migrations (with retry logic)\n\
 echo "Running migrations..."\n\
-php artisan migrate --force || echo "Migration failed but continuing"\n\
+max_migration_attempts=5\n\
+migration_attempt=1\n\
+while [ $migration_attempt -le $max_migration_attempts ]; do\n\
+    echo "Migration attempt $migration_attempt/$max_migration_attempts..."\n\
+    if php artisan migrate --force; then\n\
+        echo "Migrations completed successfully!"\n\
+        break\n\
+    else\n\
+        echo "Migration attempt $migration_attempt failed"\n\
+        if [ $migration_attempt -eq $max_migration_attempts ]; then\n\
+            echo "All migration attempts failed, but continuing..."\n\
+        else\n\
+            sleep 5\n\
+        fi\n\
+    fi\n\
+    migration_attempt=$((migration_attempt + 1))\n\
+done\n\
 \n\
 # Clear and recache\n\
 echo "Clearing and rebuilding caches..."\n\
@@ -104,11 +102,19 @@ php artisan route:cache || echo "Route cache failed"\n\
 php artisan view:clear || echo "View clear failed"\n\
 php artisan view:cache || echo "View cache failed"\n\
 \n\
-echo "Starting supervisor..."\n\
-# Ensure nginx is configured to listen on port 80\n\
-echo "Configuring nginx to listen on port 80..."\n\
-# Start supervisor\n\
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n\
+echo "Starting nginx and PHP-FPM..."\n\
+# Start nginx and PHP-FPM directly instead of using supervisor\n\
+nginx -g "daemon off;" &\n\
+php-fpm &\n\
+\n\
+echo "Services started. Waiting for nginx to be ready..."\n\
+sleep 3\n\
+\n\
+echo "Checking if nginx is listening on port 80..."\n\
+netstat -tlnp | grep :80 || echo "Nginx not yet listening on port 80"\n\
+\n\
+# Keep the container running\n\
+wait\n\
 ' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
 # Expose port 80 (Render will map this to their internal port)
