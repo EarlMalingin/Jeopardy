@@ -21,4 +21,4 @@ services:
         value: sync
       - key: LOG_CHANNEL
         value: stack
-    buildCommand: echo "Building with Dockerfile.render"
+    buildCommand: echo "Building Laravel application"

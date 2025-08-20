@@ -1,4 +1,4 @@
-# Simple Render-optimized Dockerfile for Laravel Jeopardy App
+# Simple Laravel Dockerfile for Render
 FROM php:8.2-apache
 
 # Set working directory
@@ -38,29 +38,25 @@ RUN chown -R www-data:www-data /var/www/html \
 
 # Create .env file if it doesn't exist
 RUN if [ ! -f .env ]; then \
-    if [ -f .env.example ]; then \
-        cp .env.example .env; \
-    else \
-        echo "APP_NAME=\"Jeopardy Game\"" > .env; \
-        echo "APP_ENV=production" >> .env; \
-        echo "APP_KEY=" >> .env; \
-        echo "APP_DEBUG=false" >> .env; \
-        echo "APP_URL=http://localhost" >> .env; \
-        echo "LOG_CHANNEL=stack" >> .env; \
-        echo "DB_CONNECTION=sqlite" >> .env; \
-        echo "DB_DATABASE=database/database.sqlite" >> .env; \
-        echo "CACHE_DRIVER=file" >> .env; \
-        echo "SESSION_DRIVER=file" >> .env; \
-        echo "QUEUE_CONNECTION=sync" >> .env; \
-    fi; \
+    echo "APP_NAME=\"Jeopardy Game\"" > .env; \
+    echo "APP_ENV=production" >> .env; \
+    echo "APP_KEY=" >> .env; \
+    echo "APP_DEBUG=false" >> .env; \
+    echo "APP_URL=http://localhost" >> .env; \
+    echo "LOG_CHANNEL=stack" >> .env; \
+    echo "DB_CONNECTION=sqlite" >> .env; \
+    echo "DB_DATABASE=database/database.sqlite" >> .env; \
+    echo "CACHE_DRIVER=file" >> .env; \
+    echo "SESSION_DRIVER=file" >> .env; \
+    echo "QUEUE_CONNECTION=sync" >> .env; \
 fi
 
-# Create database directory (for SQLite fallback)
+# Create database directory
 RUN mkdir -p database \
     && touch database/database.sqlite \
     && chown www-data:www-data database/database.sqlite
 
-# Create storage directories and set permissions
+# Create storage directories
 RUN mkdir -p storage/framework/cache/data \
     && mkdir -p storage/framework/sessions \
     && mkdir -p storage/framework/views \
@@ -84,43 +80,35 @@ RUN echo '<VirtualHost *:${PORT:-80}>\n\
 
 # Create startup script
 RUN echo '#!/bin/bash\n\
-set -e\n\
 \n\
-echo "Starting Jeopardy App..."\n\
+echo "Starting Laravel application..."\n\
 \n\
 # Generate key if not set\n\
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
-    echo "Generating application key..."\n\
-    php artisan key:generate --no-interaction || echo "Key generation failed"\n\
+    php artisan key:generate --no-interaction\n\
 fi\n\
 \n\
 # Run migrations\n\
-echo "Running migrations..."\n\
-php artisan migrate --force || echo "Migrations failed, continuing..."\n\
+php artisan migrate --force\n\
 \n\
 # Clear and cache config\n\
-echo "Clearing and rebuilding caches..."\n\
-php artisan config:clear || echo "Config clear failed"\n\
-php artisan config:cache || echo "Config cache failed"\n\
-php artisan route:clear || echo "Route clear failed"\n\
-php artisan route:cache || echo "Route cache failed"\n\
-php artisan view:clear || echo "View clear failed"\n\
-php artisan view:cache || echo "View cache failed"\n\
+php artisan config:clear\n\
+php artisan config:cache\n\
+php artisan route:clear\n\
+php artisan route:cache\n\
+php artisan view:clear\n\
+php artisan view:cache\n\
 \n\
-# Configure Apache with the correct port\n\
-echo "Configuring Apache to listen on port ${PORT:-80}..."\n\
+# Configure Apache port\n\
 envsubst '\$PORT' < /etc/apache2/sites-available/000-default.conf.template > /etc/apache2/sites-available/000-default.conf\n\
-\n\
-# Update Apache port configuration\n\
 echo "Listen ${PORT:-80}" > /etc/apache2/ports.conf\n\
 \n\
-# Start Apache in foreground\n\
-echo "Starting Apache..."\n\
+echo "Starting Apache on port ${PORT:-80}..."\n\
 apache2-foreground\n\
 ' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
-# Expose the port that Render provides
+# Expose port
 EXPOSE ${PORT:-80}
 
-# Use startup script
+# Start the application
 CMD ["/var/www/html/start.sh"]
