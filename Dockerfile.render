@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     sqlite3 \
     libsqlite3-dev \
     net-tools \
+    gettext \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql mbstring exif pcntl bcmath gd zip
 
 # Install Composer
@@ -39,8 +40,8 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/bootstrap/cache \
     && chmod +x /var/www/html/artisan
 
-# Copy nginx configuration
-COPY docker/nginx.conf /etc/nginx/sites-available/default
+# Copy nginx configuration and process environment variables
+COPY docker/nginx.conf /etc/nginx/sites-available/default.template
 
 # Copy supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -103,6 +104,11 @@ php artisan view:clear || echo "View clear failed"\n\
 php artisan view:cache || echo "View cache failed"\n\
 \n\
 echo "Starting nginx and PHP-FPM..."\n\
+\n\
+# Process nginx configuration with environment variables\n\
+echo "Configuring nginx to listen on port ${PORT:-80}..."\n\
+envsubst '\$PORT' < /etc/nginx/sites-available/default.template > /etc/nginx/sites-available/default\n\
+\n\
 # Start nginx and PHP-FPM directly instead of using supervisor\n\
 nginx -g "daemon off;" &\n\
 php-fpm &\n\
@@ -110,15 +116,15 @@ php-fpm &\n\
 echo "Services started. Waiting for nginx to be ready..."\n\
 sleep 3\n\
 \n\
-echo "Checking if nginx is listening on port 80..."\n\
-netstat -tlnp | grep :80 || echo "Nginx not yet listening on port 80"\n\
+echo "Checking if nginx is listening on port ${PORT:-80}..."\n\
+netstat -tlnp | grep :${PORT:-80} || echo "Nginx not yet listening on port ${PORT:-80}"\n\
 \n\
 # Keep the container running\n\
 wait\n\
 ' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
-# Expose port 80 (Render will map this to their internal port)
-EXPOSE 80
+# Expose the port that Render provides (defaults to 80)
+EXPOSE ${PORT:-80}
 
 # Use startup script
 CMD ["/var/www/html/start.sh"]
