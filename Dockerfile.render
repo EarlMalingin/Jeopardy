@@ -47,7 +47,23 @@ COPY docker/nginx.conf /etc/nginx/sites-available/default.template
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Create .env file if it doesn't exist
-RUN if [ ! -f .env ]; then cp .env.example .env; fi
+RUN if [ ! -f .env ]; then \
+    if [ -f .env.example ]; then \
+        cp .env.example .env; \
+    else \
+        echo "APP_NAME=\"Jeopardy Game\"" > .env; \
+        echo "APP_ENV=production" >> .env; \
+        echo "APP_KEY=" >> .env; \
+        echo "APP_DEBUG=false" >> .env; \
+        echo "APP_URL=http://localhost" >> .env; \
+        echo "LOG_CHANNEL=stack" >> .env; \
+        echo "DB_CONNECTION=sqlite" >> .env; \
+        echo "DB_DATABASE=database/database.sqlite" >> .env; \
+        echo "CACHE_DRIVER=file" >> .env; \
+        echo "SESSION_DRIVER=file" >> .env; \
+        echo "QUEUE_CONNECTION=sync" >> .env; \
+    fi; \
+fi
 
 # Create database directory (for SQLite fallback)
 RUN mkdir -p database \
