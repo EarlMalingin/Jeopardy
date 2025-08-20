@@ -1,5 +1,5 @@
 # Simple Render-optimized Dockerfile for Laravel Jeopardy App
-FROM php:8.2-fpm
+FROM php:8.2-apache
 
 # Set working directory
 WORKDIR /var/www/html
@@ -14,12 +14,8 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     zip \
     unzip \
-    nginx \
-    supervisor \
     sqlite3 \
     libsqlite3-dev \
-    net-tools \
-    gettext \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql mbstring exif pcntl bcmath gd zip
 
 # Install Composer
@@ -28,8 +24,8 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Copy composer files first
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies (without scripts to avoid artisan dependency)
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Copy application files
 COPY . .
@@ -39,12 +35,6 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache \
     && chmod +x /var/www/html/artisan
-
-# Copy nginx configuration and process environment variables
-COPY docker/nginx.conf /etc/nginx/sites-available/default.template
-
-# Copy supervisor configuration
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Create .env file if it doesn't exist
 RUN if [ ! -f .env ]; then \
@@ -78,6 +68,20 @@ RUN mkdir -p storage/framework/cache/data \
     && chown -R www-data:www-data storage \
     && chmod -R 775 storage
 
+# Enable Apache modules
+RUN a2enmod rewrite
+
+# Configure Apache for Laravel
+RUN echo '<VirtualHost *:${PORT:-80}>\n\
+    DocumentRoot /var/www/html/public\n\
+    <Directory /var/www/html/public>\n\
+        AllowOverride All\n\
+        Require all granted\n\
+    </Directory>\n\
+    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
+    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf.template
+
 # Create startup script
 RUN echo '#!/bin/bash\n\
 set -e\n\
@@ -90,27 +94,11 @@ if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then\n\
     php artisan key:generate --no-interaction || echo "Key generation failed"\n\
 fi\n\
 \n\
-# Run migrations (with retry logic)\n\
+# Run migrations\n\
 echo "Running migrations..."\n\
-max_migration_attempts=5\n\
-migration_attempt=1\n\
-while [ $migration_attempt -le $max_migration_attempts ]; do\n\
-    echo "Migration attempt $migration_attempt/$max_migration_attempts..."\n\
-    if php artisan migrate --force; then\n\
-        echo "Migrations completed successfully!"\n\
-        break\n\
-    else\n\
-        echo "Migration attempt $migration_attempt failed"\n\
-        if [ $migration_attempt -eq $max_migration_attempts ]; then\n\
-            echo "All migration attempts failed, but continuing..."\n\
-        else\n\
-            sleep 5\n\
-        fi\n\
-    fi\n\
-    migration_attempt=$((migration_attempt + 1))\n\
-done\n\
+php artisan migrate --force || echo "Migrations failed, continuing..."\n\
 \n\
-# Clear and recache\n\
+# Clear and cache config\n\
 echo "Clearing and rebuilding caches..."\n\
 php artisan config:clear || echo "Config clear failed"\n\
 php artisan config:cache || echo "Config cache failed"\n\
@@ -119,27 +107,19 @@ php artisan route:cache || echo "Route cache failed"\n\
 php artisan view:clear || echo "View clear failed"\n\
 php artisan view:cache || echo "View cache failed"\n\
 \n\
-echo "Starting nginx and PHP-FPM..."\n\
+# Configure Apache with the correct port\n\
+echo "Configuring Apache to listen on port ${PORT:-80}..."\n\
+envsubst '\$PORT' < /etc/apache2/sites-available/000-default.conf.template > /etc/apache2/sites-available/000-default.conf\n\
 \n\
-# Process nginx configuration with environment variables\n\
-echo "Configuring nginx to listen on port ${PORT:-80}..."\n\
-envsubst '\$PORT' < /etc/nginx/sites-available/default.template > /etc/nginx/sites-available/default\n\
+# Update Apache port configuration\n\
+echo "Listen ${PORT:-80}" > /etc/apache2/ports.conf\n\
 \n\
-# Start nginx and PHP-FPM directly instead of using supervisor\n\
-nginx -g "daemon off;" &\n\
-php-fpm &\n\
-\n\
-echo "Services started. Waiting for nginx to be ready..."\n\
-sleep 3\n\
-\n\
-echo "Checking if nginx is listening on port ${PORT:-80}..."\n\
-netstat -tlnp | grep :${PORT:-80} || echo "Nginx not yet listening on port ${PORT:-80}"\n\
-\n\
-# Keep the container running\n\
-wait\n\
+# Start Apache in foreground\n\
+echo "Starting Apache..."\n\
+apache2-foreground\n\
 ' > /var/www/html/start.sh && chmod +x /var/www/html/start.sh
 
-# Expose the port that Render provides (defaults to 80)
+# Expose the port that Render provides
 EXPOSE ${PORT:-80}
 
 # Use startup script

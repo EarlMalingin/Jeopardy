@@ -22,4 +22,3 @@ services:
       - key: LOG_CHANNEL
         value: stack
     buildCommand: echo "Building with Dockerfile.render"
-    startCommand: /var/www/html/start.sh
